@@ -71,6 +71,7 @@ print(f"Title: {brief['title']}")
 print(f"TLDR: {brief.get('tldr')}")
 print(f"Keywords: {brief.get('keywords')}")
 print(f"Citations: {brief.get('citations')}")
+print(f"GitHub: {brief.get('github_url')}")
 ```
 
 **Token cost**: Very low (~500 tokens)

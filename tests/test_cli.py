@@ -101,11 +101,33 @@ class TestCLIPaper:
             "title": "Test Paper",
             "tldr": "Test TLDR",
             "citations": 100,
+            "github_url": "https://github.com/example/test-paper",
         }
         mock_reader_class.return_value = mock_instance
 
         result = runner.invoke(main, ["paper", "2409.05591", "--brief"])
         assert result.exit_code in [0, 1]  # Might fail due to token
+
+    @mock.patch("deepxiv_sdk.cli.Reader")
+    @mock.patch("deepxiv_sdk.cli.ensure_token", return_value="test_token")
+    def test_paper_brief_displays_github_url(self, mock_ensure_token, mock_reader_class):
+        """Test paper brief pretty output includes GitHub URL when available."""
+        runner = CliRunner()
+        mock_instance = mock.Mock()
+        mock_instance.brief.return_value = {
+            "arxiv_id": "2409.05591",
+            "title": "Test Paper",
+            "tldr": "Test TLDR",
+            "citations": 100,
+            "src_url": "https://arxiv.org/pdf/2409.05591.pdf",
+            "github_url": "https://github.com/example/test-paper",
+        }
+        mock_reader_class.return_value = mock_instance
+
+        result = runner.invoke(main, ["paper", "2409.05591", "--brief"])
+        assert result.exit_code == 0
+        assert "GitHub" in result.output
+        assert "https://github.com/example/test-paper" in result.output
 
 
 class TestCLIToken:

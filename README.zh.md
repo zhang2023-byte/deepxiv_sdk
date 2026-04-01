@@ -81,6 +81,7 @@ for paper in results.get("results", []):
 brief = reader.brief("2409.05591")
 print(f"标题: {brief['title']}")
 print(f"摘要: {brief.get('tldr', 'N/A')}")
+print(f"GitHub: {brief.get('github_url', 'N/A')}")
 
 # 读取特定章节
 intro = reader.section("2409.05591", "Introduction")
@@ -158,7 +159,7 @@ ln -s "$(pwd)/skills/deepxiv-cli" $CODEX_HOME/skills/deepxiv-cli
 ```python
 reader.search(query, size=10, search_mode="hybrid", categories=None, min_citation=None)
 reader.head(arxiv_id)              # 论文元数据和章节概览
-reader.brief(arxiv_id)             # 快速摘要 (标题、TLDR、关键词、引用数)
+reader.brief(arxiv_id)             # 快速摘要 (标题、TLDR、关键词、引用数、GitHub 链接)
 reader.section(arxiv_id, section)  # 读取特定章节
 reader.raw(arxiv_id)               # 完整论文
 reader.preview(arxiv_id)           # 论文预览 (~10k 字符)

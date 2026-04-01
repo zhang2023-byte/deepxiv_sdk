@@ -117,13 +117,13 @@ def get_paper_brief(arxiv_id: str) -> str:
     """Get brief information about an arXiv paper (quick summary).
 
     This is perfect for getting a quick overview without loading full metadata.
-    Returns title, TLDR, keywords, publication date, and citation count.
+    Returns title, TLDR, keywords, publication date, citation count, and GitHub URL when available.
 
     Args:
         arxiv_id: arXiv ID (e.g., "2409.05591", "2503.04975")
 
     Returns:
-        Brief paper information including title, TLDR, keywords, citations
+        Brief paper information including title, TLDR, keywords, citations, and GitHub URL
     """
     try:
         if not arxiv_id or not arxiv_id.strip():
@@ -137,6 +137,8 @@ def get_paper_brief(arxiv_id: str) -> str:
         output = [f"📄 Paper: {arxiv_id}\n"]
         output.append(f"📌 Title: {brief.get('title', 'No title')}\n")
         output.append(f"🔗 PDF: {brief.get('src_url', 'N/A')}")
+        if brief.get("github_url"):
+            output.append(f"💻 GitHub: {brief.get('github_url')}")
         output.append(f"📅 Published: {brief.get('publish_at', 'N/A')}")
         output.append(f"📈 Citations: {brief.get('citations', 0)}\n")
 

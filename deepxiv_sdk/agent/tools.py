@@ -150,7 +150,7 @@ def get_tools_definition() -> List[Dict]:
             "type": "function",
             "function": {
                 "name": "quick_preview",
-                "description": "Quickly fetch brief metadata for multiple papers concurrently. Returns title, TLDR, keywords, citations, and publication date for each paper. Does NOT include section information. Perfect for scanning multiple papers to decide which ones to investigate in detail.",
+                "description": "Quickly fetch brief metadata for multiple papers concurrently. Returns title, TLDR, keywords, citations, publication date, and GitHub URL when available for each paper. Does NOT include section information. Perfect for scanning multiple papers to decide which ones to investigate in detail.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -568,6 +568,7 @@ class ToolExecutor:
             citations = data.get("citations", 0)
             publish_at = data.get("publish_at", "N/A")
             src_url = data.get("src_url", "")
+            github_url = data.get("github_url", "")
 
             output.append(f"{i}. {title}")
             output.append(f"   arXiv ID: {arxiv_id}")
@@ -581,6 +582,9 @@ class ToolExecutor:
             
             if src_url:
                 output.append(f"   URL: {src_url}")
+
+            if github_url:
+                output.append(f"   GitHub: {github_url}")
             
             output.append("")
 

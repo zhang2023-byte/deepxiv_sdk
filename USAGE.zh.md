@@ -71,6 +71,7 @@ print(f"标题: {brief['title']}")
 print(f"摘要: {brief.get('tldr')}")
 print(f"关键词: {brief.get('keywords')}")
 print(f"引用数: {brief.get('citations')}")
+print(f"GitHub: {brief.get('github_url')}")
 ```
 
 **Token 成本**: 很低（~500 tokens）

@@ -287,7 +287,7 @@ def search(query, token, limit, mode, output_format, categories, min_citations, 
 @click.option("--section", "-s", default=None, help="Get a specific section by name")
 @click.option("--preview", "-p", is_flag=True, help="Get only a preview (first ~10k chars)")
 @click.option("--head", is_flag=True, help="Get paper metadata (returns JSON)")
-@click.option("--brief", "-b", is_flag=True, help="Get brief info (title, TLDR, keywords, citations)")
+@click.option("--brief", "-b", is_flag=True, help="Get brief info (title, TLDR, keywords, citations, GitHub URL)")
 @click.option("--raw", is_flag=True, help="Get raw markdown content")
 @click.option("--popularity", is_flag=True, help="Get social impact metrics (trending signal)")
 def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, popularity):
@@ -371,6 +371,8 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
             click.echo(f"📅 Published: {result.get('publish_at', 'N/A')}")
             click.echo(f"📊 Citations: {result.get('citations', 0)}")
             click.echo(f"🔗 PDF: {result.get('src_url', 'N/A')}")
+            if result.get("github_url"):
+                click.echo(f"💻 GitHub: {result.get('github_url')}")
             
             if result.get('keywords'):
                 keywords = result.get('keywords', [])
@@ -550,7 +552,7 @@ SEARCH:
 GET PAPER:
   deepxiv paper ARXIV_ID            Get paper by arXiv ID
     --head                          Get paper metadata (JSON)
-    --brief, -b                     Get brief info (title, TLDR, keywords, citations)
+    --brief, -b                     Get brief info (title, TLDR, keywords, citations, GitHub URL)
     --raw                           Get raw markdown content
     --preview, -p                   Get preview (~10k chars)
     --section, -s NAME              Get specific section
@@ -1017,4 +1019,3 @@ def trending(days, limit, output_format, json_output):
 
 if __name__ == "__main__":
     main()
-

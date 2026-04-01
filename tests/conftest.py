@@ -52,6 +52,7 @@ def sample_paper_brief():
         "citations": 150,
         "publish_at": "2023-10-01",
         "src_url": "https://arxiv.org/pdf/2409.05591.pdf",
+        "github_url": "https://github.com/cpacker/MemGPT",
     }
 
 

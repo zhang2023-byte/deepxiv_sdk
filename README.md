@@ -83,6 +83,7 @@ for paper in results.get("results", []):
 brief = reader.brief("2409.05591")
 print(f"Title: {brief['title']}")
 print(f"TLDR: {brief.get('tldr', 'N/A')}")
+print(f"GitHub: {brief.get('github_url', 'N/A')}")
 
 # Read specific section
 intro = reader.section("2409.05591", "Introduction")
@@ -187,7 +188,7 @@ For frameworks without native skill support, you can load [skills/deepxiv-cli/SK
 ```python
 reader.search(query, size=10, search_mode="hybrid", categories=None, min_citation=None)
 reader.head(arxiv_id)              # Paper metadata and sections overview
-reader.brief(arxiv_id)             # Quick summary (title, TLDR, keywords, citations)
+reader.brief(arxiv_id)             # Quick summary (title, TLDR, keywords, citations, GitHub URL)
 reader.section(arxiv_id, section)  # Read specific section
 reader.raw(arxiv_id)               # Full paper
 reader.preview(arxiv_id)           # Paper preview (~10k characters)

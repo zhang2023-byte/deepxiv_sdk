@@ -302,6 +302,7 @@ class Reader:
             - publish_at: Publication date
             - citations: Citation count
             - src_url: Direct link to PDF
+            - github_url: Associated GitHub repository URL (if available)
 
         Raises:
             APIError: If the request fails

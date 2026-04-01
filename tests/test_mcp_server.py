@@ -79,12 +79,15 @@ class TestMCPPaperBrief:
             "citations": 100,
             "publish_at": "2024-01-01",
             "src_url": "https://arxiv.org/pdf/2409.05591.pdf",
+            "github_url": "https://github.com/example/test-paper",
         }
 
         result = get_paper_brief("2409.05591")
         assert isinstance(result, str)
         assert "Test Paper" in result
         assert "2409.05591" in result
+        assert "GitHub" in result
+        assert "https://github.com/example/test-paper" in result
 
     @mock.patch("deepxiv_sdk.mcp_server._reader")
     def test_get_paper_brief_not_found(self, mock_reader):
