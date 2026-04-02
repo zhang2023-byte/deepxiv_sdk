@@ -7,20 +7,6 @@
 - **📄 Technical Report**: [![arxiv](https://img.shields.io/badge/arXiv-2603.00084-b31b1b)](https://arxiv.org/abs/2603.00084)
 - **📖 中文文档**: [README.zh.md](README.zh.md)
 
-## Why Choose deepxiv?
-
-| Feature | deepxiv | Standard arXiv API |
-|---------|---------|-------------------|
-| **Hybrid Search** (BM25 + Vector) | ✅ | ❌ |
-| **AI-Generated Summaries** (TLDR) | ✅ | ❌ |
-| **Section-by-Section Access** | ✅ | ❌ |
-| **MCP Protocol Support** | ✅ | ❌ |
-| **Built-in Reasoning Agent** | ✅ | ❌ |
-| **Biomedical Papers** (PMC) | ✅ | ❌ |
-| **Free Daily Requests** | 10,000 | ∞* |
-
-*arXiv API has no limit, but strict rate limiting
-
 ## Core Features
 
 - 🔍 **Hybrid Search**: BM25 + Vector search for better quality results
