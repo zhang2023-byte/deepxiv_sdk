@@ -22,6 +22,11 @@ class AuthenticationError(APIError):
     pass
 
 
+class BadRequestError(APIError):
+    """Raised when the request is invalid (400)."""
+    pass
+
+
 class RateLimitError(APIError):
     """Raised when rate limit is exceeded (429)."""
     pass
@@ -73,6 +78,8 @@ class Reader:
         self.base_url = base_url.rstrip("/")
         self.arxiv_endpoint = f"{self.base_url}/arxiv/"
         self.pmc_endpoint = f"{self.base_url}/pmc/"
+        self.websearch_endpoint = f"{self.base_url}/websearch"
+        self.semantic_scholar_endpoint = f"{self.base_url}/semantic_scholar"
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -99,6 +106,7 @@ class Reader:
             Response JSON or None if max retries exceeded
 
         Raises:
+            BadRequestError: Invalid request parameters or malformed IDs (400)
             AuthenticationError: Invalid or expired token (401)
             RateLimitError: Daily limit reached (429)
             NotFoundError: Resource not found (404)
@@ -119,7 +127,12 @@ class Reader:
             )
 
             # Handle HTTP errors with appropriate exceptions
-            if response.status_code == 401:
+            if response.status_code == 400:
+                logger.warning(f"Bad request to {url}: {response.text}")
+                raise BadRequestError(
+                    "Invalid request. Please check your arXiv/PMC ID or command arguments."
+                )
+            elif response.status_code == 401:
                 logger.error("Authentication failed: Invalid or expired token")
                 raise AuthenticationError(
                     "Invalid or expired token. Run 'deepxiv config' to set a valid token."
@@ -178,6 +191,117 @@ class Reader:
                     f"Failed to connect to {url}. "
                     "Check your internet connection or try again later."
                 )
+
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP error {e.response.status_code}: {e}")
+            raise APIError(f"HTTP error {e.response.status_code}: {str(e)}")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed: {e}")
+            raise APIError(f"Request failed: {str(e)}")
+
+        except ValueError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            raise APIError(f"Invalid response format: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            raise APIError(f"Unexpected error: {str(e)}")
+
+    def _make_post_request(
+        self,
+        url: str,
+        json_data: Optional[Dict[str, Any]] = None,
+        retry_count: int = 0,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Make a POST request to the API with retry logic and comprehensive error handling.
+
+        Args:
+            url: URL to request
+            json_data: JSON request body
+            retry_count: Current retry attempt number (internal use)
+
+        Returns:
+            Response JSON or None if max retries exceeded
+
+        Raises:
+            BadRequestError: Invalid request parameters or malformed IDs (400)
+            AuthenticationError: Invalid or expired token (401)
+            RateLimitError: Daily limit reached (429)
+            ServerError: Server error (5xx)
+            APIError: Other API errors
+        """
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+
+        try:
+            logger.debug(f"Making POST request to {url} with json {json_data}")
+            response = requests.post(
+                url,
+                json=json_data,
+                headers=headers,
+                timeout=self.timeout,
+            )
+
+            if response.status_code == 400:
+                logger.warning(f"Bad request to {url}: {response.text}")
+                raise BadRequestError(
+                    "Invalid request. Please check your query or command arguments."
+                )
+            elif response.status_code == 401:
+                logger.error("Authentication failed: Invalid or expired token")
+                raise AuthenticationError(
+                    "Invalid or expired token. Run 'deepxiv config' to set a valid token."
+                )
+            elif response.status_code == 429:
+                logger.warning("Rate limit exceeded")
+                raise RateLimitError(
+                    "Daily limit reached. Visit https://data.rag.ac.cn/register for a higher limit."
+                )
+            elif response.status_code >= 500:
+                logger.error(f"Server error {response.status_code}: {response.text}")
+                raise ServerError(f"Server error {response.status_code}")
+
+            response.raise_for_status()
+            if not response.content:
+                logger.debug(f"Empty response body from {url}")
+                return {}
+            result = response.json()
+            logger.debug(f"Successfully received POST response from {url}")
+            return result
+
+        except APIError:
+            raise
+
+        except requests.exceptions.Timeout:
+            if retry_count < self.max_retries:
+                wait_time = self.retry_delay * (2 ** retry_count)
+                logger.warning(
+                    f"POST request timeout (attempt {retry_count + 1}/{self.max_retries}), "
+                    f"retrying in {wait_time}s..."
+                )
+                time.sleep(wait_time)
+                return self._make_post_request(url, json_data, retry_count + 1)
+            raise APIError(
+                f"Request timed out after {self.max_retries} retries. "
+                "Check your internet connection or try again later."
+            )
+
+        except requests.exceptions.ConnectionError:
+            if retry_count < self.max_retries:
+                wait_time = self.retry_delay * (2 ** retry_count)
+                logger.warning(
+                    f"POST connection error (attempt {retry_count + 1}/{self.max_retries}), "
+                    f"retrying in {wait_time}s..."
+                )
+                time.sleep(wait_time)
+                return self._make_post_request(url, json_data, retry_count + 1)
+            raise APIError(
+                f"Failed to connect to {url}. "
+                "Check your internet connection or try again later."
+            )
 
         except requests.exceptions.HTTPError as e:
             logger.error(f"HTTP error {e.response.status_code}: {e}")
@@ -264,6 +388,53 @@ class Reader:
         result = self._make_request(self.arxiv_endpoint, params=params)
         logger.info(f"Search for '{query}' returned {result.get('total', 0)} results")
         return result or {"total": 0, "results": []}
+
+    def websearch(self, query: str) -> Dict[str, Any]:
+        """
+        Search the web with the DeepXiv websearch endpoint.
+
+        Args:
+            query: Search query string
+
+        Returns:
+            Dictionary response from the websearch endpoint
+
+        Raises:
+            APIError: If the request fails
+        """
+        if not query or not query.strip():
+            raise ValueError("Query cannot be empty")
+
+        result = self._make_post_request(
+            self.websearch_endpoint,
+            json_data={"query": query},
+        )
+        logger.info(f"Websearch for '{query}' completed")
+        return result or {}
+
+    def semantic_scholar(self, semantic_scholar_id: str) -> Dict[str, Any]:
+        """
+        Get paper information by Semantic Scholar ID.
+
+        Args:
+            semantic_scholar_id: Semantic Scholar paper ID (e.g., "258001")
+
+        Returns:
+            Dictionary response from the semantic scholar endpoint
+
+        Raises:
+            APIError: If the request fails
+        """
+        if not semantic_scholar_id or not str(semantic_scholar_id).strip():
+            raise ValueError("semantic_scholar_id cannot be empty")
+
+        params: Dict[str, Any] = {
+            "id": str(semantic_scholar_id).strip(),
+            "token": self.token or "",
+        }
+        result = self._make_request(self.semantic_scholar_endpoint, params=params)
+        logger.info(f"Semantic Scholar lookup for '{semantic_scholar_id}' completed")
+        return result or {}
 
     def head(self, arxiv_id: str) -> Dict[str, Any]:
         """
@@ -623,11 +794,14 @@ class Reader:
                 "Provide a token when initializing Reader: Reader(token='your_token')"
             )
 
-        params: Dict[str, Any] = {"arxiv_id": arxiv_id}
+        params: Dict[str, Any] = {
+            "arxiv_id": arxiv_id,
+            "token": self.token,
+        }
         try:
-            # Social impact data is served from the public API domain rather than
-            # the paper content domain used by the main Reader endpoints.
-            signal_url = "https://api.rag.ac.cn/arxiv/trending_signal"
+            # Social impact data is served from the data.rag.ac.cn domain and
+            # expects the token in query params for compatibility.
+            signal_url = f"{self.base_url}/arxiv/trending_signal"
             result = self._make_request(signal_url, params=params)
             logger.info(f"Retrieved social impact metrics for {arxiv_id}")
             return result or None

@@ -1,126 +1,162 @@
 # deepxiv-sdk
 
-**High-quality academic paper data interface designed for LLM applications.** Provides hybrid search, intelligent summaries, section-by-section access, and built-in reasoning agents.
+**DeepXiv is an agent-first paper search and progressive reading tool.**
+
+Install it with `pip`, start using it immediately, and let the CLI auto-register a token on first use. No extra setup is required before your first query.
 
 - **📚 API Documentation**: [https://data.rag.ac.cn/api/docs](https://data.rag.ac.cn/api/docs)
 - **🎥 Demo Video**: [![Watch Demo](https://img.shields.io/badge/YouTube-Watch%20Demo-red)](https://youtu.be/atr71CbQybM)
 - **📄 Technical Report**: [![arxiv](https://img.shields.io/badge/arXiv-2603.00084-b31b1b)](https://arxiv.org/abs/2603.00084)
 - **📖 中文文档**: [README.zh.md](README.zh.md)
 
-## Core Features
+## What DeepXiv Does
 
-- 🔍 **Hybrid Search**: BM25 + Vector search for better quality results
-- 📄 **Section-Based Access**: Load only what you need, save tokens
-- 📚 **PMC Support**: Full access to biomedical literature
-- 💻 **Three-Layer Interface**: CLI / Python SDK / MCP Server
-- 🤖 **Built-in Agent**: ReAct framework with multi-turn reasoning
-- 🔌 **Flexible LLM Support**: Compatible with OpenAI, DeepSeek, OpenRouter, etc.
-- ✨ **Smart Summaries**: AI-generated paper abstracts and keywords
-- 🔥 **Trending Papers**: Discover hot papers from social media (no token needed)
-- 📱 **Social Impact**: Check how papers are trending on social media
+DeepXiv is built around two core workflows that matter for agents:
 
-## 🌐 Open Access Literature Support
+1. **Search + Progressive Content Access**
+2. **Trending + Popularity signals**
 
-### Current Support
-- ✅ **arXiv** - Computer Science, Physics, Math, and more
-- ✅ **PubMed Central (PMC)** - Biomedical and life sciences
-
-### Coming Soon (Roadmap)
-- 🔄 **bioRxiv** - Preprints in biology
-- 🔄 **medRxiv** - Preprints in medicine
-- 🔄 **Other OA Sources** - Additional open access repositories
-- 🔄 **Full OA Literature Coverage** - Comprehensive open access ecosystem
-
-> **Why OA Literature?** By focusing on open access papers, deepxiv ensures that researchers and AI systems have unrestricted access to knowledge without subscription barriers.
+Instead of blindly loading full papers, DeepXiv lets agents read in layers, based on token budget and task value.
 
 ## Quick Start
 
-### 1. Installation
-
 ```bash
-# Basic install (Reader + CLI)
 pip install deepxiv-sdk
-
-# Full install (MCP + Agent)
-pip install deepxiv-sdk[all]
 ```
-
-### 2. First Use
 
 On first use, deepxiv automatically registers a free token and saves it to `~/.env`:
 
 ```bash
-deepxiv search "agent memory" --limit 5
+deepxiv search "agentic memory" --limit 5
 ```
 
-### 3. Python Usage
-
-```python
-from deepxiv_sdk import Reader
-
-reader = Reader()
-
-# Search papers
-results = reader.search("agent memory", size=5)
-for paper in results.get("results", []):
-    print(f"{paper['title']} ({paper['arxiv_id']})")
-
-# Get paper info
-brief = reader.brief("2409.05591")
-print(f"Title: {brief['title']}")
-print(f"TLDR: {brief.get('tldr', 'N/A')}")
-print(f"GitHub: {brief.get('github_url', 'N/A')}")
-
-# Read specific section
-intro = reader.section("2409.05591", "Introduction")
-print(intro[:500])
-
-# Get trending papers (no token required)
-trending = reader.trending(days=7, limit=5)
-for paper in trending['papers']:
-    print(f"#{paper['rank']}: {paper['arxiv_id']}")
-    print(f"  Views: {paper['stats']['total_views']}")
-
-# Get social impact metrics (requires token)
-reader_with_token = Reader(token="your_token_here")
-impact = reader_with_token.social_impact("2409.05591")
-if impact:
-    print(f"Views: {impact['total_views']}")
-    print(f"Tweets: {impact['total_tweets']}")
-```
-
-### 4. CLI Usage
+If you want the full stack including MCP and the built-in research agent:
 
 ```bash
-# Search papers
-deepxiv search "transformer" --limit 10
-
-# Get paper info
-deepxiv paper 2409.05591                  # Full paper
-deepxiv paper 2409.05591 --brief          # Quick overview
-deepxiv paper 2409.05591 --head           # Metadata
-deepxiv paper 2409.05591 --section intro  # Specific section
-
-# Get social impact (trending signal) - requires token
-deepxiv paper 2409.05591 --popularity          # Views, tweets, likes
-deepxiv paper 2409.05591 --popularity --json   # JSON output
-
-# Get trending papers (no token required)
-deepxiv trending                               # Last 7 days, 30 papers
-deepxiv trending --days 30                     # Last 30 days
-deepxiv trending --limit 5                     # Limit results
-deepxiv trending --days 14 --limit 10          # Combined options
-deepxiv trending --json                        # JSON output
-deepxiv trending --days 30 --limit 5 --json    # All options
-
-# Get PMC papers
-deepxiv pmc PMC544940 --head
-
-# Show current token
-deepxiv token
+pip install "deepxiv-sdk[all]"
 ```
 
-### 5. Use in Claude Desktop (MCP Server)
+## CLI-First Workflow
+
+The CLI is the primary interface. DeepXiv is designed so agents can work like researchers: search first, judge quickly, then read only the most valuable parts.
+
+```bash
+deepxiv search "agentic memory" --limit 5
+deepxiv paper 2603.21489 --brief
+deepxiv paper 2603.21489 --head
+deepxiv paper 2603.21489 --section Analysis
+```
+
+Three commands matter most for progressive reading:
+
+- `--brief`: decide whether a paper is worth deeper reading
+- `--head`: inspect structure, sections, and token distribution
+- `--section`: read only the most valuable parts such as `Introduction`, `Method`, or `Experiments`
+
+This is the core DeepXiv idea: agents should not load full papers unless they truly need them.
+
+## CLI Features
+
+### 1. Paper Search and Reading
+
+```bash
+deepxiv search "transformer" --limit 10
+deepxiv paper 2409.05591 --brief
+deepxiv paper 2409.05591 --head
+deepxiv paper 2409.05591 --section Introduction
+deepxiv paper 2409.05591
+```
+
+### 2. Trending and Popularity
+
+Research is not only about what exists, but what is worth reading now.
+
+```bash
+deepxiv trending --days 7 --limit 30
+deepxiv paper 2409.05591 --popularity
+```
+
+- `trending` finds the hottest recent papers from social signals
+- `--popularity` gives paper-level propagation metrics such as views, tweets, likes, and replies
+
+### 3. Web Search
+
+```bash
+deepxiv wsearch "karpathy"
+deepxiv wsearch "karpathy" --json
+```
+
+Notes:
+- `deepxiv wsearch` calls the DeepXiv web search endpoint
+- each `wsearch` request costs **20 limit**
+- a registered token gets **10,000 limit per day**, so this is roughly **500 web searches per day**
+
+### 4. Semantic Scholar Metadata by ID
+
+```bash
+deepxiv sc 258001
+deepxiv sc 258001 --json
+```
+
+`deepxiv sc` fetches metadata using a Semantic Scholar paper ID.
+
+Notes:
+- this is useful when your workflow already has Semantic Scholar IDs
+- DeepXiv will **soon provide a Semantic Scholar search service** that returns Semantic Scholar IDs directly
+
+### 5. Biomedical Papers
+
+```bash
+deepxiv pmc PMC544940 --head
+deepxiv pmc PMC544940
+```
+
+## Example Agent Workflows
+
+### Workflow 1: Review recent hot papers
+
+```bash
+deepxiv trending --days 7 --limit 30 --json
+```
+
+Then an agent can:
+
+1. run `--brief` for each paper
+2. run `--head` for the most promising ones
+3. read only key sections
+4. produce a report without manually opening dozens of papers
+
+### Workflow 2: Enter a new research topic
+
+```bash
+deepxiv search "agentic memory" --date-from 2026-03-01 --limit 100 --format json
+```
+
+Then an agent can:
+
+1. batch-brief the results
+2. prioritize papers with GitHub links
+3. inspect experiments via `--head`
+4. read `Experiments` / `Results`
+5. turn datasets, metrics, and scores into a baseline table
+
+## Built-in Deep Research Agent
+
+If you do not want to compose the workflow manually, the CLI already includes a built-in research agent.
+
+```bash
+pip install "deepxiv-sdk[all]"
+deepxiv agent config
+deepxiv agent query "What are the latest papers about agent memory?" --verbose
+```
+
+If you already have your own agent stack, you can also just plug in the DeepXiv CLI skill and keep your own orchestration.
+
+## Agent Integration
+
+DeepXiv is designed to work well inside Codex, Claude Code, OpenClaw, and similar agent runtimes.
+
+### MCP Server
 
 Add to Claude Desktop MCP config file:
 
@@ -144,28 +180,50 @@ Add to Claude Desktop MCP config file:
 }
 ```
 
-### 6. Agent Skill (Optional)
-
-deepxiv also provides a reusable **Agent Skill** for LLM frameworks:
+### CLI Skill
 
 ```bash
-# View the skill definition
-cat skills/deepxiv-cli/SKILL.md
-
-# Use with Codex or other agentic LLM frameworks
-# Copy or symlink to your skills directory:
 mkdir -p $CODEX_HOME/skills
 ln -s "$(pwd)/skills/deepxiv-cli" $CODEX_HOME/skills/deepxiv-cli
 ```
 
-The skill teaches agents when to use:
-- `deepxiv search` - Find papers
-- `deepxiv paper` - Read papers
-- `deepxiv pmc` - Access biomedical literature
-- `deepxiv agent` - Use the reasoning agent
-- `deepxiv token` - Manage tokens
+For frameworks without native skill support, load [skills/deepxiv-cli/SKILL.md](skills/deepxiv-cli/SKILL.md) as operating instructions.
 
-For frameworks without native skill support, you can load [skills/deepxiv-cli/SKILL.md](skills/deepxiv-cli/SKILL.md) as system prompts or operating instructions.
+## Python Usage
+
+```python
+from deepxiv_sdk import Reader
+
+reader = Reader()
+
+results = reader.search("agent memory", size=5)
+brief = reader.brief("2409.05591")
+head = reader.head("2409.05591")
+intro = reader.section("2409.05591", "Introduction")
+
+web = reader.websearch("karpathy")
+sc_meta = reader.semantic_scholar("258001")
+```
+
+## Roadmap
+
+DeepXiv is moving toward an **academic paper data interface at 100M+ scale**.
+
+The roadmap is:
+
+1. **Full arXiv coverage with T+1 automatic updates**
+2. **anyXiv coverage**, including bioRxiv, medRxiv, and similar repositories
+3. **Full open-access literature coverage**
+
+The metadata backbone will increasingly rely on **Semantic Scholar metadata as the base layer**, while continuously expanding coverage and enrichment quality.
+
+## Current Coverage
+
+- ✅ **arXiv** - current primary source
+- ✅ **PubMed Central (PMC)** - biomedical and life sciences
+- 🔄 **Semantic Scholar metadata integration** - expanding as the metadata foundation
+
+> DeepXiv focuses on open-access literature so agents can work on unrestricted paper data instead of getting blocked by subscription barriers.
 
 ## Complete API Reference
 
@@ -173,6 +231,8 @@ For frameworks without native skill support, you can load [skills/deepxiv-cli/SK
 
 ```python
 reader.search(query, size=10, search_mode="hybrid", categories=None, min_citation=None)
+reader.websearch(query)            # Web search (20 limit per request)
+reader.semantic_scholar(sc_id)     # Metadata lookup by Semantic Scholar ID
 reader.head(arxiv_id)              # Paper metadata and sections overview
 reader.brief(arxiv_id)             # Quick summary (title, TLDR, keywords, citations, GitHub URL)
 reader.section(arxiv_id, section)  # Read specific section

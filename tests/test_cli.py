@@ -80,6 +80,81 @@ class TestCLISearch:
         # Should either succeed or mention missing token
         assert result.exit_code in [0, 1]
 
+    @mock.patch("deepxiv_sdk.cli.Reader")
+    @mock.patch("deepxiv_sdk.cli.ensure_token", return_value="test_token")
+    def test_search_rate_limit_shows_friendly_message(self, mock_ensure_token, mock_reader_class):
+        """Test search shows a friendly message when daily limit is reached."""
+        from deepxiv_sdk import RateLimitError
+
+        runner = CliRunner()
+        mock_instance = mock.Mock()
+        mock_instance.search.side_effect = RateLimitError("Daily limit reached")
+        mock_reader_class.return_value = mock_instance
+
+        result = runner.invoke(main, ["search", "agent"])
+        assert result.exit_code == 1
+        assert "当前 token 已到日使用上限" in result.output
+        assert "Your token has reached its daily usage limit" in result.output
+        assert "https://data.rag.ac.cn/register" in result.output
+        assert "Traceback" not in result.output
+
+    @mock.patch("deepxiv_sdk.cli.Reader")
+    @mock.patch("deepxiv_sdk.cli.ensure_token", return_value="test_token")
+    def test_wsearch_json_output(self, mock_ensure_token, mock_reader_class):
+        """Test websearch command JSON output."""
+        runner = CliRunner()
+        mock_instance = mock.Mock()
+        mock_instance.websearch.return_value = {
+            "query": "karpathy",
+            "results": [
+                {
+                    "title": "Andrej Karpathy",
+                    "link": "https://karpathy.ai/",
+                }
+            ],
+        }
+        mock_reader_class.return_value = mock_instance
+
+        result = runner.invoke(main, ["wsearch", "karpathy", "--json"])
+        assert result.exit_code == 0
+        assert '"query": "karpathy"' in result.output
+        assert "Andrej Karpathy" in result.output
+
+    @mock.patch("deepxiv_sdk.cli.Reader")
+    @mock.patch("deepxiv_sdk.cli.ensure_token", return_value="test_token")
+    def test_sc_json_output(self, mock_ensure_token, mock_reader_class):
+        """Test semantic scholar command JSON output."""
+        runner = CliRunner()
+        mock_instance = mock.Mock()
+        mock_instance.semantic_scholar.return_value = {
+            "id": "258001",
+            "title": "Semantic Scholar Test Paper",
+        }
+        mock_reader_class.return_value = mock_instance
+
+        result = runner.invoke(main, ["sc", "258001", "--json"])
+        assert result.exit_code == 0
+        assert '"id": "258001"' in result.output
+        assert "Semantic Scholar Test Paper" in result.output
+
+    @mock.patch("deepxiv_sdk.cli.Reader")
+    @mock.patch("deepxiv_sdk.cli.ensure_token", return_value="test_token")
+    def test_paper_bad_request_shows_friendly_message(self, mock_ensure_token, mock_reader_class):
+        """Test paper shows a friendly message when arXiv ID is invalid."""
+        from deepxiv_sdk import BadRequestError
+
+        runner = CliRunner()
+        mock_instance = mock.Mock()
+        mock_instance.raw.side_effect = BadRequestError("Invalid request")
+        mock_reader_class.return_value = mock_instance
+
+        result = runner.invoke(main, ["paper", "agent"])
+        assert result.exit_code == 1
+        assert "`deepxiv paper` 需要传入 arXiv ID" in result.output
+        assert "`deepxiv paper` expects an arXiv ID" in result.output
+        assert "deepxiv search" in result.output
+        assert "Traceback" not in result.output
+
 
 class TestCLIPaper:
     """Test CLI paper commands."""

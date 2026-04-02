@@ -6,6 +6,7 @@ from unittest import mock
 from deepxiv_sdk import (
     Reader,
     APIError,
+    BadRequestError,
     AuthenticationError,
     RateLimitError,
     NotFoundError,
@@ -91,6 +92,20 @@ class TestSearch:
         """Test search with minimum citation filter."""
         results = mock_reader.search("attention", min_citation=100)
         assert isinstance(results, dict)
+
+    def test_websearch_basic(self, mock_reader):
+        """Test websearch."""
+        results = mock_reader.websearch("karpathy")
+        assert isinstance(results, dict)
+        assert results["query"] == "karpathy"
+        assert len(results["results"]) == 1
+
+    def test_semantic_scholar_basic(self, mock_reader):
+        """Test semantic scholar lookup."""
+        results = mock_reader.semantic_scholar("258001")
+        assert isinstance(results, dict)
+        assert results["id"] == "258001"
+        assert results["title"] == "Semantic Scholar Test Paper"
 
 
 class TestPaperAccess:
@@ -240,6 +255,18 @@ class TestErrorHandling:
             with pytest.raises(AuthenticationError, match="Invalid or expired token"):
                 reader._make_request("https://example.com/protected")
 
+    def test_make_request_preserves_bad_request_error(self):
+        """Test that 400 responses are surfaced as BadRequestError."""
+        reader = Reader(token="test_token")
+
+        response = mock.Mock()
+        response.status_code = 400
+        response.text = '{"detail":"bad request"}'
+
+        with mock.patch("requests.get", return_value=response):
+            with pytest.raises(BadRequestError, match="Invalid request"):
+                reader._make_request("https://example.com/bad")
+
     def test_make_request_allows_empty_success_response(self):
         """Test that 200 responses with empty bodies are treated as empty payloads."""
         reader = Reader(token="test_token")
@@ -287,16 +314,16 @@ class TestInputValidation:
 class TestSocialImpactEndpoint:
     """Test social impact endpoint behavior."""
 
-    def test_social_impact_uses_api_domain(self):
-        """Test that social impact requests use the correct API host."""
+    def test_social_impact_uses_data_domain_with_token_param(self):
+        """Test that social impact requests use the data domain and token query param."""
         reader = Reader(token="test_token")
 
         with mock.patch.object(reader, "_make_request", return_value={}) as mocked_request:
             reader.social_impact("2603.26221")
 
         mocked_request.assert_called_once_with(
-            "https://api.rag.ac.cn/arxiv/trending_signal",
-            params={"arxiv_id": "2603.26221"},
+            "https://data.rag.ac.cn/arxiv/trending_signal",
+            params={"arxiv_id": "2603.26221", "token": "test_token"},
         )
 
     def test_social_impact_returns_none_for_empty_response(self):

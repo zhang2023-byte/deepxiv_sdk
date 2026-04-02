@@ -8,7 +8,7 @@ import click
 import requests
 from pathlib import Path
 from uuid import uuid4
-from .reader import Reader
+from .reader import Reader, APIError, AuthenticationError, BadRequestError, RateLimitError
 
 # Try to load .env file if python-dotenv is available
 try:
@@ -146,11 +146,50 @@ def check_token_and_warn(token):
 
 def handle_auth_error():
     """Handle authentication errors with helpful message."""
-    click.echo("\n❌ Authentication failed (401 Unauthorized)\n", err=True)
-    click.echo("Your API token is missing or invalid.\n", err=True)
-    click.echo("Try running any deepxiv command again to auto-register a new token.", err=True)
-    click.echo("Or set it directly: export DEEPXIV_TOKEN=your_token", err=True)
-    click.echo("Use `deepxiv token` to inspect the current token.\n", err=True)
+    click.echo("\n❌ 认证失败（401 Unauthorized） / Authentication failed (401 Unauthorized)\n", err=True)
+    click.echo("当前 API token 缺失或无效。 / Your API token is missing or invalid.\n", err=True)
+    click.echo("你可以重新运行任意 deepxiv 命令自动注册新 token。 / Try running any deepxiv command again to auto-register a new token.", err=True)
+    click.echo("或手动设置：export DEEPXIV_TOKEN=your_token / Or set it directly: export DEEPXIV_TOKEN=your_token", err=True)
+    click.echo("使用 `deepxiv token` 查看当前 token。 / Use `deepxiv token` to inspect the current token.\n", err=True)
+
+
+def handle_rate_limit_error():
+    """Handle daily limit errors with a friendly message."""
+    click.echo("\n❌ 当前 token 已到日使用上限。 / Your token has reached its daily usage limit.\n", err=True)
+    click.echo("请访问 https://data.rag.ac.cn/register 注册，以获得更高 limit。 / Visit https://data.rag.ac.cn/register to get a higher limit.\n", err=True)
+
+
+def handle_bad_request_error(command_name="command"):
+    """Handle invalid requests with command-specific hints."""
+    click.echo("\n❌ 请求参数有误。 / Invalid request arguments.\n", err=True)
+
+    if command_name == "paper":
+        click.echo("`deepxiv paper` 需要传入 arXiv ID，例如 `2409.05591`。 / `deepxiv paper` expects an arXiv ID such as `2409.05591`.\n", err=True)
+        click.echo("如果你输入的是关键词，请先使用 `deepxiv search \"keyword\"` 查到论文 ID 再读取。 / If you entered a keyword, use `deepxiv search \"keyword\"` first to find the paper ID.\n", err=True)
+    elif command_name == "pmc":
+        click.echo("`deepxiv pmc` 需要传入 PMC ID，例如 `PMC544940`。 / `deepxiv pmc` expects a PMC ID such as `PMC544940`.\n", err=True)
+    elif command_name == "search":
+        click.echo("请检查搜索关键词和筛选参数是否正确。 / Please check your search query and filters.\n", err=True)
+    else:
+        click.echo("请检查命令参数、论文 ID 或筛选条件是否正确。 / Please check your command arguments, paper ID, or filters.\n", err=True)
+
+
+def run_reader_call(fn, command_name="command"):
+    """Run a reader call and convert API exceptions into friendly CLI output."""
+    try:
+        return fn()
+    except BadRequestError:
+        handle_bad_request_error(command_name)
+        sys.exit(1)
+    except AuthenticationError:
+        handle_auth_error()
+        sys.exit(1)
+    except RateLimitError:
+        handle_rate_limit_error()
+        sys.exit(1)
+    except APIError as e:
+        click.echo(f"\n❌ Error: {e}\n", err=True)
+        sys.exit(1)
 
 
 def get_agent_config():
@@ -244,14 +283,17 @@ def search(query, token, limit, mode, output_format, categories, min_citations, 
     if categories:
         cat_list = [c.strip() for c in categories.split(",")]
 
-    results = reader.search(
-        query=query,
-        size=limit,
-        search_mode=mode,
-        categories=cat_list,
-        min_citation=min_citations,
-        date_from=date_from,
-        date_to=date_to
+    results = run_reader_call(
+        lambda: reader.search(
+            query=query,
+            size=limit,
+            search_mode=mode,
+            categories=cat_list,
+            min_citation=min_citations,
+            date_from=date_from,
+            date_to=date_to,
+        ),
+        command_name="search",
     )
 
     if not results:
@@ -277,6 +319,82 @@ def search(query, token, limit, mode, output_format, categories, min_citations, 
             click.echo(f"   arXiv: {arxiv_id} | Score: {score:.3f} | Citations: {citations}")
             click.echo(f"   {abstract}...")
             click.echo()
+
+
+@main.command(name="wsearch")
+@click.argument("query")
+@click.option("--token", "-t", default=None, envvar="DEEPXIV_TOKEN", help="API token (or set DEEPXIV_TOKEN env var)")
+@click.option("--output", "-o", "output_format", type=click.Choice(["text", "json"]),
+              default="text", help="Output format (default: text)")
+@click.option("--json", "json_output", is_flag=True, help="Shorthand for --output json")
+def websearch_command(query, token, output_format, json_output):
+    """Search the web.
+
+    Example:
+        deepxiv wsearch "karpathy"
+        deepxiv wsearch "karpathy" --json
+    """
+    if json_output:
+        output_format = "json"
+
+    token = ensure_token(token)
+    if not token:
+        sys.exit(1)
+
+    reader = Reader(token=token)
+    result = run_reader_call(
+        lambda: reader.websearch(query),
+        command_name="search",
+    )
+
+    if output_format == "json":
+        click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    if not result:
+        click.echo("ℹ️  No web search results found.")
+        return
+
+    click.echo(f"\n🌐 Web Search Results for '{query}'\n")
+    click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+@main.command(name="sc")
+@click.argument("semantic_scholar_id")
+@click.option("--token", "-t", default=None, envvar="DEEPXIV_TOKEN", help="API token (or set DEEPXIV_TOKEN env var)")
+@click.option("--output", "-o", "output_format", type=click.Choice(["text", "json"]),
+              default="json", help="Output format (default: json)")
+@click.option("--json", "json_output", is_flag=True, help="Shorthand for --output json")
+def semantic_scholar_command(semantic_scholar_id, token, output_format, json_output):
+    """Get paper data by Semantic Scholar ID.
+
+    Example:
+        deepxiv sc 258001
+        deepxiv sc 258001 --json
+    """
+    if json_output:
+        output_format = "json"
+
+    token = ensure_token(token)
+    if not token:
+        sys.exit(1)
+
+    reader = Reader(token=token)
+    result = run_reader_call(
+        lambda: reader.semantic_scholar(semantic_scholar_id),
+        command_name="search",
+    )
+
+    if output_format == "json":
+        click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    if not result:
+        click.echo("ℹ️  No Semantic Scholar result found.")
+        return
+
+    click.echo(f"\n🧠 Semantic Scholar Result for '{semantic_scholar_id}'\n")
+    click.echo(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 @main.command()
@@ -312,9 +430,7 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
 
         reader = Reader(token=token)
         try:
-            from .reader import AuthenticationError
-
-            impact = reader.social_impact(arxiv_id)
+            impact = run_reader_call(lambda: reader.social_impact(arxiv_id), command_name="paper")
 
             if output_format == "json":
                 if impact:
@@ -333,9 +449,6 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
                 else:
                     click.echo(f"ℹ️  No social impact data found for arXiv:{arxiv_id}")
                     click.echo("   This paper may be too old or not mentioned on social media.\n")
-        except AuthenticationError as e:
-            click.echo(f"❌ Authentication Error: {e}", err=True)
-            sys.exit(1)
         except Exception as e:
             click.echo(f"❌ Error: {e}", err=True)
             sys.exit(1)
@@ -349,7 +462,7 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
 
     if head:
         # Get paper metadata
-        result = reader.head(arxiv_id)
+        result = run_reader_call(lambda: reader.head(arxiv_id), command_name="paper")
         if not result:
             handle_auth_error()
             sys.exit(1)
@@ -357,7 +470,7 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
 
     elif brief:
         # Get brief information
-        result = reader.brief(arxiv_id)
+        result = run_reader_call(lambda: reader.brief(arxiv_id), command_name="paper")
         if not result:
             handle_auth_error()
             sys.exit(1)
@@ -386,7 +499,7 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
 
     elif raw:
         # Get raw markdown content
-        content = reader.raw(arxiv_id)
+        content = run_reader_call(lambda: reader.raw(arxiv_id), command_name="paper")
         if not content:
             handle_auth_error()
             sys.exit(1)
@@ -394,7 +507,7 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
 
     elif section:
         # Get specific section
-        content = reader.section(arxiv_id, section)
+        content = run_reader_call(lambda: reader.section(arxiv_id, section), command_name="paper")
         if not content:
             handle_auth_error()
             sys.exit(1)
@@ -407,7 +520,7 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
 
     elif preview:
         # Get preview
-        result = reader.preview(arxiv_id)
+        result = run_reader_call(lambda: reader.preview(arxiv_id), command_name="paper")
         if not result:
             handle_auth_error()
             sys.exit(1)
@@ -419,7 +532,7 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
 
     elif output_format == "json":
         # Get full JSON
-        result = reader.json(arxiv_id)
+        result = run_reader_call(lambda: reader.json(arxiv_id), command_name="paper")
         if not result:
             handle_auth_error()
             sys.exit(1)
@@ -427,10 +540,10 @@ def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, po
 
     else:
         # Get full markdown
-        content = reader.raw(arxiv_id)
+        content = run_reader_call(lambda: reader.raw(arxiv_id), command_name="paper")
         if not content:
             # Try head for metadata
-            head = reader.head(arxiv_id)
+            head = run_reader_call(lambda: reader.head(arxiv_id), command_name="paper")
             if head:
                 click.echo(f"# {head.get('title', arxiv_id)}\n")
                 click.echo(f"**Authors:** {', '.join([a.get('name', str(a)) if isinstance(a, dict) else str(a) for a in head.get('authors', [])])}\n")
@@ -511,14 +624,14 @@ def pmc(pmc_id, token, output_format, head):
 
     if head:
         # Get PMC paper metadata
-        result = reader.pmc_head(pmc_id)
+        result = run_reader_call(lambda: reader.pmc_head(pmc_id), command_name="pmc")
         if not result:
             handle_auth_error()
             sys.exit(1)
         click.echo(json.dumps(result, indent=2))
     else:
         # Get full PMC JSON
-        result = reader.pmc_json(pmc_id)
+        result = run_reader_call(lambda: reader.pmc_json(pmc_id), command_name="pmc")
         if not result:
             handle_auth_error()
             sys.exit(1)
@@ -541,6 +654,8 @@ CONFIGURATION:
 
 SEARCH:
   deepxiv search "query"            Search for papers
+  deepxiv wsearch "query"           Search the web
+  deepxiv sc ID                     Get paper data by Semantic Scholar ID
     --limit, -l N                   Number of results (default: 10)
     --mode, -m MODE                 Search mode: bm25, vector, hybrid (default: hybrid)
     --format, -f FORMAT             Output format: text, json (default: text)
@@ -573,6 +688,9 @@ EXAMPLES:
 
   # Search examples
   deepxiv search "transformer architecture" --limit 5
+  deepxiv wsearch "karpathy"
+  deepxiv wsearch "karpathy" --json
+  deepxiv sc 258001
   deepxiv search "machine learning" --categories cs.AI,cs.LG --min-citations 100
   deepxiv search "quantum computing" --mode vector --format json
 
