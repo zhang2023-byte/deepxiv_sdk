@@ -13,7 +13,6 @@ Install it with `pip`, start using it immediately, and let the CLI auto-register
 
 > 🚀 **Live Demo**: I used vibe coding, based on deepxiv CLI, to build a [DeepResearch demo](https://demo.rag.ac.cn/) in 1 hour — feel free to try it out!
 
----
 
 <div style="display: flex; justify-content: space-around;">
   <div style="text-align: center;">
