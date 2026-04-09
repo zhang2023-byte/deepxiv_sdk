@@ -17,7 +17,7 @@ Install it with `pip`, start using it immediately, and let the CLI auto-register
 
 <div style="display: flex; justify-content: space-around;">
   <div style="text-align: center;">
-    <img src="./assets/demo.gif" style="width: 100%;">
+    <img src="./assets/demo.gif" style="width: 60%;">
   </div>
 </div>
 
