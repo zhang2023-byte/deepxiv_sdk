@@ -123,6 +123,33 @@ deepxiv pmc PMC544940 --head
 deepxiv pmc PMC544940
 ```
 
+### 6. bioRxiv & medRxiv Preprints
+
+> ⚠️ **Beta**: bioRxiv and medRxiv support is currently in testing and optimization.
+> To use it, install directly from source:
+> ```bash
+> pip install git+https://github.com/qhjqhj00/deepxiv_sdk.git
+> ```
+
+```bash
+# Search
+deepxiv search "protein design" --biorxiv --limit 5
+deepxiv search "Alzheimer" --medrxiv --date-from 2024-01
+
+# Fetch a paper by DOI
+deepxiv biorxiv 10.1101/2021.02.26.433129
+deepxiv biorxiv 10.1101/2021.02.26.433129 --format text
+deepxiv biorxiv 10.1101/2021.02.26.433129 --section Introduction,Methods
+deepxiv biorxiv 10.1101/2021.02.26.433129 --roc --roc-num 5
+
+deepxiv medrxiv 10.1101/2025.08.11.25333149
+deepxiv medrxiv 10.1101/2025.08.11.25333149 --format text
+
+# Also works via --biorxiv / --medrxiv flags on the paper command
+deepxiv paper 10.1101/2021.02.26.433129 --biorxiv
+deepxiv paper 10.1101/2021.02.26.433129 --biorxiv --section Introduction
+```
+
 ## Example Agent Workflows
 
 ### Workflow 1: Review recent hot papers
@@ -237,6 +264,7 @@ The metadata backbone will increasingly rely on **Semantic Scholar metadata as t
 
 - ✅ **arXiv** - current primary source
 - ✅ **PubMed Central (PMC)** - biomedical and life sciences
+- 🧪 **bioRxiv / medRxiv** - biology & medicine preprints *(beta, install from source)*
 - 🔄 **Semantic Scholar metadata integration** - expanding as the metadata foundation
 
 > DeepXiv focuses on open-access literature so agents can work on unrestricted paper data instead of getting blocked by subscription barriers.
@@ -262,6 +290,17 @@ reader.json(arxiv_id)              # Complete structured JSON
 ```python
 reader.pmc_head(pmc_id)            # PMC paper metadata
 reader.pmc_full(pmc_id)            # Complete PMC paper JSON
+```
+
+### bioRxiv / medRxiv *(beta)*
+
+> Install from source to use these methods.
+
+```python
+reader.biomed_search(query, source="biorxiv", top_k=10)   # Search preprints
+reader.biomed_data(source_id, source="biorxiv")           # Metadata by DOI
+reader.biomed_data(source_id, source="biorxiv", data_type="section", section_names=["Introduction"])
+reader.biomed_data(source_id, source="medrxiv", data_type="roc", roc_num=5)
 ```
 
 ### Agent (Optional)

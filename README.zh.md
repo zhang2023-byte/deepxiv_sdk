@@ -113,6 +113,33 @@ deepxiv pmc PMC544940 --head
 deepxiv pmc PMC544940
 ```
 
+### 6. bioRxiv & medRxiv 预印本
+
+> ⚠️ **Beta**：bioRxiv 和 medRxiv 功能目前正在测试优化中。
+> 如需使用，请直接从源码安装：
+> ```bash
+> pip install git+https://github.com/qhjqhj00/deepxiv_sdk.git
+> ```
+
+```bash
+# 搜索
+deepxiv search "protein design" --biorxiv --limit 5
+deepxiv search "Alzheimer" --medrxiv --date-from 2024-01
+
+# 通过 DOI 获取单篇论文
+deepxiv biorxiv 10.1101/2021.02.26.433129
+deepxiv biorxiv 10.1101/2021.02.26.433129 --format text
+deepxiv biorxiv 10.1101/2021.02.26.433129 --section Introduction,Methods
+deepxiv biorxiv 10.1101/2021.02.26.433129 --roc --roc-num 5
+
+deepxiv medrxiv 10.1101/2025.08.11.25333149
+deepxiv medrxiv 10.1101/2025.08.11.25333149 --format text
+
+# 也可以在 paper 命令上加 --biorxiv / --medrxiv flag
+deepxiv paper 10.1101/2021.02.26.433129 --biorxiv
+deepxiv paper 10.1101/2021.02.26.433129 --biorxiv --section Introduction
+```
+
 ## Example Agent Workflows
 
 ### Workflow 1：跟踪近期热点论文
@@ -227,6 +254,7 @@ DeepXiv 的目标，是逐步成为一个 **亿级 academic paper data interface
 
 - ✅ **arXiv** - 当前主要数据源
 - ✅ **PubMed Central (PMC)** - 生物医学与生命科学
+- 🧪 **bioRxiv / medRxiv** - 生物学 & 医学预印本 *（Beta，需从源码安装）*
 - 🔄 **Semantic Scholar 元数据接入** - 作为基础元数据层持续扩展
 
 > DeepXiv 专注于开放获取文献，让 agent 能基于可直接访问的论文数据工作，而不是被订阅墙卡住。
@@ -252,6 +280,17 @@ reader.json(arxiv_id)              # 完整结构化 JSON
 ```python
 reader.pmc_head(pmc_id)            # PMC 论文元数据
 reader.pmc_full(pmc_id)            # 完整 PMC 论文 JSON
+```
+
+### bioRxiv / medRxiv *（Beta）*
+
+> 需从源码安装后方可使用。
+
+```python
+reader.biomed_search(query, source="biorxiv", top_k=10)   # 搜索预印本
+reader.biomed_data(source_id, source="biorxiv")           # 通过 DOI 获取元数据
+reader.biomed_data(source_id, source="biorxiv", data_type="section", section_names=["Introduction"])
+reader.biomed_data(source_id, source="medrxiv", data_type="roc", roc_num=5)
 ```
 
 ### Agent（可选）

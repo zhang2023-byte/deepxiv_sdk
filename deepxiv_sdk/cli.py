@@ -170,6 +170,8 @@ def handle_bad_request_error(command_name="command"):
         click.echo("`deepxiv pmc` 需要传入 PMC ID，例如 `PMC544940`。 / `deepxiv pmc` expects a PMC ID such as `PMC544940`.\n", err=True)
     elif command_name == "search":
         click.echo("请检查搜索关键词和筛选参数是否正确。 / Please check your search query and filters.\n", err=True)
+    elif command_name in ("biorxiv", "medrxiv"):
+        click.echo(f"`deepxiv {command_name}` 需要传入 DOI，例如 `10.1101/2021.02.26.433129`。 / `deepxiv {command_name}` expects a DOI such as `10.1101/2021.02.26.433129`.\n", err=True)
     else:
         click.echo("请检查命令参数、论文 ID 或筛选条件是否正确。 / Please check your command arguments, paper ID, or filters.\n", err=True)
 
@@ -262,15 +264,18 @@ def main():
               help="Output format (default: text)")
 @click.option("--categories", "-c", default=None, help="Filter by categories (comma-separated, e.g., cs.AI,cs.CL)")
 @click.option("--min-citations", default=None, type=int, help="Minimum citation count")
-@click.option("--date-from", default=None, help="Publication date from (YYYY-MM-DD)")
-@click.option("--date-to", default=None, help="Publication date to (YYYY-MM-DD)")
-def search(query, token, limit, mode, output_format, categories, min_citations, date_from, date_to):
-    """Search for arXiv papers.
+@click.option("--date-from", default=None, help="Publication date from (YYYY-MM-DD or YYYY-MM)")
+@click.option("--date-to", default=None, help="Publication date to (YYYY-MM-DD or YYYY-MM)")
+@click.option("--biorxiv", "source", flag_value="biorxiv", default=False, help="Search bioRxiv preprints")
+@click.option("--medrxiv", "source", flag_value="medrxiv", default=False, help="Search medRxiv preprints")
+def search(query, token, limit, mode, output_format, categories, min_citations, date_from, date_to, source):
+    """Search for papers (arXiv by default; use --biorxiv or --medrxiv for preprints).
 
     Example:
         deepxiv search "agent memory" --limit 5
         deepxiv search "transformer" --mode bm25 --format json
-        deepxiv search "LLM" --token YOUR_TOKEN
+        deepxiv search "protein design" --biorxiv --limit 5
+        deepxiv search "Alzheimer" --medrxiv --date-from 2024-01
     """
     token = ensure_token(token)
     if not token:
@@ -278,7 +283,55 @@ def search(query, token, limit, mode, output_format, categories, min_citations, 
 
     reader = Reader(token=token)
 
-    # Parse categories
+    # ── bioRxiv / medRxiv search ──────────────────────────────────────────────
+    if source in ("biorxiv", "medrxiv"):
+        date_search_type = None
+        date_str = None
+        if date_from and date_to:
+            date_search_type = "between"
+            date_str = [date_from, date_to]
+        elif date_from:
+            date_search_type = "after"
+            date_str = date_from
+        elif date_to:
+            date_search_type = "before"
+            date_str = date_to
+
+        results = run_reader_call(
+            lambda: reader.biomed_search(
+                query=query,
+                source=source,
+                top_k=limit,
+                date_search_type=date_search_type,
+                date_str=date_str,
+            ),
+            command_name="search",
+        )
+
+        if output_format == "json":
+            click.echo(json.dumps(results, indent=2))
+            return
+
+        result_list = results.get("result", [])
+        total = results.get("total_count", len(result_list))
+        label = "bioRxiv" if source == "biorxiv" else "medRxiv"
+        click.echo(f"\nFound {total} {label} papers for '{query}' (showing {len(result_list)}):\n")
+
+        for i, paper in enumerate(result_list, 1):
+            paper_id = paper.get("biorxiv_id", paper.get("medrxiv_id", "Unknown"))
+            title = paper.get("title", "No title")
+            abstract = paper.get("abstract", paper.get("tldr", ""))[:200]
+            score = paper.get("score", 0)
+            date = paper.get("date", "N/A")
+
+            click.echo(f"{i}. {title}")
+            click.echo(f"   ID: {paper_id} | Score: {score:.3f} | Date: {date}")
+            if abstract:
+                click.echo(f"   {abstract}...")
+            click.echo()
+        return
+
+    # ── arXiv search (default) ────────────────────────────────────────────────
     cat_list = None
     if categories:
         cat_list = [c.strip() for c in categories.split(",")]
@@ -408,19 +461,51 @@ def semantic_scholar_command(semantic_scholar_id, token, output_format, json_out
 @click.option("--brief", "-b", is_flag=True, help="Get brief info (title, TLDR, keywords, citations, GitHub URL)")
 @click.option("--raw", is_flag=True, help="Get raw markdown content")
 @click.option("--popularity", is_flag=True, help="Get social impact metrics (trending signal)")
-def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, popularity):
-    """Get an arXiv paper by ID.
+@click.option("--biorxiv", "bio_source", flag_value="biorxiv", default=False, help="Treat ID as bioRxiv DOI")
+@click.option("--medrxiv", "bio_source", flag_value="medrxiv", default=False, help="Treat ID as medRxiv DOI")
+def paper(arxiv_id, token, output_format, section, preview, head, brief, raw, popularity, bio_source):
+    """Get an arXiv paper by ID (or bioRxiv/medRxiv paper with --biorxiv/--medrxiv).
 
     Example:
         deepxiv paper 2409.05591
-        deepxiv paper 2409.05591 --preview
         deepxiv paper 2409.05591 --brief
-        deepxiv paper 2409.05591 --popularity          # Social impact metrics
-        deepxiv paper 2409.05591 --token YOUR_TOKEN
         deepxiv paper 2409.05591 --section Introduction
-        deepxiv paper 2409.05591 --head
-        deepxiv paper 2409.05591 --raw
+        deepxiv paper 10.1101/2021.02.26.433129 --biorxiv
+        deepxiv paper 10.1101/2021.02.26.433129 --biorxiv --section Introduction
+        deepxiv paper 10.1101/2025.08.11.25333149 --medrxiv
     """
+    # ── bioRxiv / medRxiv via --biorxiv / --medrxiv flag ─────────────────────
+    if bio_source in ("biorxiv", "medrxiv"):
+        token = ensure_token(token)
+        if not token:
+            sys.exit(1)
+        reader = Reader(token=token)
+        if section:
+            data_type = "section"
+            section_names = [s.strip() for s in section.split(",")]
+        else:
+            data_type = "metadata"
+            section_names = None
+
+        result = run_reader_call(
+            lambda: reader.biomed_data(
+                source_id=arxiv_id,
+                source=bio_source,
+                data_type=data_type,
+                section_names=section_names,
+            ),
+            command_name=bio_source,
+        )
+        if not result:
+            handle_auth_error()
+            sys.exit(1)
+
+        if output_format == "json" or data_type == "section":
+            click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            _print_biomed_metadata(result, "bioRxiv" if bio_source == "biorxiv" else "medRxiv")
+        return
+    
     # Handle --popularity flag (requires token)
     if popularity:
         token = get_token(token)
@@ -638,6 +723,142 @@ def pmc(pmc_id, token, output_format, head):
         click.echo(json.dumps(result, indent=2))
 
 
+def _print_biomed_metadata(result: dict, label: str):
+    """Pretty-print bioRxiv / medRxiv metadata."""
+    click.echo(f"\n📄 {result.get('title', 'No title')}\n")
+    click.echo(f"🆔 DOI: {result.get('source_id', 'N/A')}")
+    click.echo(f"📅 Date: {result.get('publication_date', result.get('date', 'N/A'))}")
+    click.echo(f"🔗 URL: {result.get('url', 'N/A')}")
+    authors = result.get("authors", [])
+    if authors:
+        names = ", ".join(
+            a.get("name", str(a)) if isinstance(a, dict) else str(a)
+            for a in authors[:5]
+        )
+        if len(authors) > 5:
+            names += f" ... (+{len(authors) - 5} more)"
+        click.echo(f"👤 Authors: {names}")
+    categories = result.get("categories", [])
+    if categories:
+        click.echo(f"🏷️  Categories: {', '.join(categories)}")
+    if result.get("tldr"):
+        click.echo(f"\n💡 TLDR:\n{result['tldr']}\n")
+    elif result.get("abstract"):
+        click.echo(f"\n📝 Abstract:\n{result['abstract'][:500]}...\n")
+
+
+@main.command()
+@click.argument("source_id")
+@click.option("--token", "-t", default=None, envvar="DEEPXIV_TOKEN", help="API token (or set DEEPXIV_TOKEN env var)")
+@click.option("--format", "-f", "output_format", default="json", type=click.Choice(["json", "text"]),
+              help="Output format (default: json)")
+@click.option("--section", "-s", default=None, help="Get specific section(s) by name (comma-separated)")
+@click.option("--roc", is_flag=True, help="Get cited-by-reason list")
+@click.option("--roc-num", default=None, type=int, help="Limit number of cited-by-reason entries")
+def biorxiv(source_id, token, output_format, section, roc, roc_num):
+    """Get a bioRxiv paper by DOI.
+
+    SOURCE_ID is the paper DOI, e.g. 10.1101/2021.02.26.433129
+
+    Example:
+        deepxiv biorxiv 10.1101/2021.02.26.433129
+        deepxiv biorxiv 10.1101/2021.02.26.433129 --format text
+        deepxiv biorxiv 10.1101/2021.02.26.433129 --section Introduction,Methods
+        deepxiv biorxiv 10.1101/2021.02.26.433129 --roc --roc-num 5
+    """
+    token = ensure_token(token)
+    if not token:
+        sys.exit(1)
+
+    reader = Reader(token=token)
+
+    if roc:
+        data_type = "roc"
+        section_names = None
+    elif section:
+        data_type = "section"
+        section_names = [s.strip() for s in section.split(",")]
+    else:
+        data_type = "metadata"
+        section_names = None
+
+    result = run_reader_call(
+        lambda: reader.biomed_data(
+            source_id=source_id,
+            source="biorxiv",
+            data_type=data_type,
+            section_names=section_names,
+            roc_num=roc_num,
+        ),
+        command_name="biorxiv",
+    )
+
+    if not result:
+        handle_auth_error()
+        sys.exit(1)
+
+    if output_format == "text" and data_type == "metadata":
+        _print_biomed_metadata(result, "bioRxiv")
+    else:
+        click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+@main.command()
+@click.argument("source_id")
+@click.option("--token", "-t", default=None, envvar="DEEPXIV_TOKEN", help="API token (or set DEEPXIV_TOKEN env var)")
+@click.option("--format", "-f", "output_format", default="json", type=click.Choice(["json", "text"]),
+              help="Output format (default: json)")
+@click.option("--section", "-s", default=None, help="Get specific section(s) by name (comma-separated)")
+@click.option("--roc", is_flag=True, help="Get cited-by-reason list")
+@click.option("--roc-num", default=None, type=int, help="Limit number of cited-by-reason entries")
+def medrxiv(source_id, token, output_format, section, roc, roc_num):
+    """Get a medRxiv paper by DOI.
+
+    SOURCE_ID is the paper DOI, e.g. 10.1101/2025.08.11.25333149
+
+    Example:
+        deepxiv medrxiv 10.1101/2025.08.11.25333149
+        deepxiv medrxiv 10.1101/2025.08.11.25333149 --format text
+        deepxiv medrxiv 10.1101/2025.08.11.25333149 --section Introduction
+        deepxiv medrxiv 10.1101/2025.08.11.25333149 --roc
+    """
+    token = ensure_token(token)
+    if not token:
+        sys.exit(1)
+
+    reader = Reader(token=token)
+
+    if roc:
+        data_type = "roc"
+        section_names = None
+    elif section:
+        data_type = "section"
+        section_names = [s.strip() for s in section.split(",")]
+    else:
+        data_type = "metadata"
+        section_names = None
+
+    result = run_reader_call(
+        lambda: reader.biomed_data(
+            source_id=source_id,
+            source="medrxiv",
+            data_type=data_type,
+            section_names=section_names,
+            roc_num=roc_num,
+        ),
+        command_name="medrxiv",
+    )
+
+    if not result:
+        handle_auth_error()
+        sys.exit(1)
+
+    if output_format == "text" and data_type == "metadata":
+        _print_biomed_metadata(result, "medRxiv")
+    else:
+        click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+
+
 @main.command()
 def help():
     """Show detailed help and usage examples.
@@ -678,6 +899,20 @@ GET PMC PAPER:
     --head                          Get PMC paper metadata (JSON)
     --format, -f FORMAT             Output format: json (default: json)
 
+GET bioRxiv PAPER:
+  deepxiv biorxiv DOI               Get bioRxiv paper by DOI
+    --section, -s NAMES             Get specific section(s), comma-separated
+    --roc                           Get cited-by-reason list
+    --roc-num N                     Limit cited-by-reason entries
+    --format, -f FORMAT             Output format: json, text (default: json)
+
+GET medRxiv PAPER:
+  deepxiv medrxiv DOI               Get medRxiv paper by DOI
+    --section, -s NAMES             Get specific section(s), comma-separated
+    --roc                           Get cited-by-reason list
+    --roc-num N                     Limit cited-by-reason entries
+    --format, -f FORMAT             Output format: json, text (default: json)
+
 MCP SERVER:
   deepxiv serve                     Start MCP server
     --transport, -t TYPE            Transport type: stdio (default: stdio)
@@ -688,6 +923,8 @@ EXAMPLES:
 
   # Search examples
   deepxiv search "transformer architecture" --limit 5
+  deepxiv search "protein design" --biorxiv --limit 5
+  deepxiv search "Alzheimer" --medrxiv --date-from 2024-01
   deepxiv wsearch "karpathy"
   deepxiv wsearch "karpathy" --json
   deepxiv sc 258001
@@ -706,6 +943,21 @@ EXAMPLES:
   deepxiv pmc PMC544940
   deepxiv pmc PMC544940 --head
   deepxiv pmc PMC514704
+
+  # Get bioRxiv / medRxiv paper examples
+  deepxiv biorxiv 10.1101/2021.02.26.433129
+  deepxiv biorxiv 10.1101/2021.02.26.433129 --format text
+  deepxiv biorxiv 10.1101/2021.02.26.433129 --section Introduction,Methods
+  deepxiv medrxiv 10.1101/2025.08.11.25333149
+  deepxiv medrxiv 10.1101/2025.08.11.25333149 --format text
+
+  # Get bioRxiv / medRxiv paper examples
+  deepxiv biorxiv 10.1101/2021.02.26.433129
+  deepxiv biorxiv 10.1101/2021.02.26.433129 --format text
+  deepxiv biorxiv 10.1101/2021.02.26.433129 --section Introduction,Methods
+  deepxiv biorxiv 10.1101/2021.02.26.433129 --roc --roc-num 5
+  deepxiv medrxiv 10.1101/2025.08.11.25333149
+  deepxiv medrxiv 10.1101/2025.08.11.25333149 --format text
 
 ENVIRONMENT:
   If DEEPXIV_TOKEN is missing, deepxiv will auto-register one on first use.

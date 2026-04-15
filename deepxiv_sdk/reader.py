@@ -808,3 +808,120 @@ class Reader:
         except NotFoundError:
             logger.warning(f"No social impact data found for {arxiv_id}")
             return None
+
+    # ========== bioRxiv / medRxiv Methods ==========
+
+    def biomed_search(
+        self,
+        query: str,
+        source: str = "biorxiv",
+        top_k: int = 10,
+        authors: Optional[List[str]] = None,
+        orgs: Optional[List[str]] = None,
+        date_search_type: Optional[str] = None,
+        date_str=None,
+        return_contents: bool = False,
+        use_fine_rerank: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Search bioRxiv or medRxiv preprints via semantic retrieval.
+
+        Args:
+            query: Search query string
+            source: "biorxiv" or "medrxiv" (default: "biorxiv")
+            top_k: Number of results to return (default: 10)
+            authors: Filter by author names (2-gram match)
+            orgs: Filter by organization names (2-gram match)
+            date_search_type: "between" / "exact" / "after" / "before"
+            date_str: Date string "YYYY", "YYYY-MM", "YYYY-MM-DD";
+                      list of two strings when date_search_type is "between"
+            return_contents: Whether to return full-text snippets (default: False)
+            use_fine_rerank: Whether to enable fine reranking (default: True)
+
+        Returns:
+            Dictionary with keys: status, total_count, result (list of papers)
+
+        Raises:
+            ValueError: If source is not "biorxiv" or "medrxiv"
+            APIError: If the request fails
+        """
+        if source not in ("biorxiv", "medrxiv"):
+            raise ValueError('source must be "biorxiv" or "medrxiv"')
+        if not query or not query.strip():
+            raise ValueError("Query cannot be empty")
+
+        url = f"{self.base_url}/{source}/retrieve"
+        json_data: Dict[str, Any] = {
+            "query": query,
+            "top_k": top_k,
+            "use_fine_rerank": use_fine_rerank,
+            "return_contents": return_contents,
+        }
+        if authors:
+            json_data["authors"] = authors
+        if orgs:
+            json_data["orgs"] = orgs
+        if date_search_type:
+            json_data["date_search_type"] = date_search_type
+            json_data["date_str"] = date_str
+
+        result = self._make_post_request(url, json_data=json_data)
+        logger.info(
+            f"biomed_search (source={source}) for '{query}' "
+            f"returned {(result or {}).get('total_count', 0)} results"
+        )
+        return result or {"status": "success", "total_count": 0, "result": []}
+
+    def biomed_data(
+        self,
+        source_id: str,
+        source: str = "biorxiv",
+        data_type: str = "metadata",
+        section_names: Optional[List[str]] = None,
+        roc_num: Optional[int] = None,
+        fields: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Retrieve a single bioRxiv / medRxiv paper's data.
+
+        Args:
+            source_id: Paper DOI, e.g. "10.1101/2021.02.26.433129"
+            source: "biorxiv" or "medrxiv" (default: "biorxiv")
+            data_type: "metadata" | "section" | "roc" (default: "metadata")
+            section_names: List of section names to retrieve (used when data_type="section")
+            roc_num: Number of cited-by-reason entries (used when data_type="roc")
+            fields: Comma-separated field filter
+
+        Returns:
+            Dictionary with paper data
+
+        Raises:
+            ValueError: If source or data_type is invalid
+            APIError: If the request fails
+        """
+        if source not in ("biorxiv", "medrxiv"):
+            raise ValueError('source must be "biorxiv" or "medrxiv"')
+        if data_type not in ("metadata", "section", "roc"):
+            raise ValueError('data_type must be "metadata", "section", or "roc"')
+        if not source_id or not source_id.strip():
+            raise ValueError("source_id cannot be empty")
+
+        url = f"{self.base_url}/{source}/data"
+        params: Dict[str, Any] = {
+            "source_id": source_id.strip(),
+            "type": data_type,
+        }
+        if section_names:
+            params["section_names"] = (
+                ",".join(section_names)
+                if isinstance(section_names, list)
+                else section_names
+            )
+        if roc_num is not None:
+            params["roc_num"] = roc_num
+        if fields:
+            params["fields"] = fields
+
+        result = self._make_request(url, params=params)
+        logger.info(f"biomed_data (source={source}, type={data_type}) for '{source_id}' completed")
+        return result or {}
