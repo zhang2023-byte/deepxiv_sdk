@@ -2,6 +2,8 @@
 
 **DeepXiv is an agent-first paper search and progressive reading tool.**
 
+> ⚠️ **Retrieval service is temporarily unavailable** due to high demand. We are expanding our capacity to better serve you.
+
 Install it with `pip`, start using it immediately, and let the CLI auto-register an API token on first use. No extra setup is required before your first query.
 
 - **📚 API Documentation**: [https://data.rag.ac.cn/api/docs](https://data.rag.ac.cn/api/docs)
